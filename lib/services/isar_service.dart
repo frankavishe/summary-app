@@ -30,6 +30,16 @@ class IsarService {
     return _isar.summaryRecords.where().sortByCreatedAtDesc().findAll();
   }
 
+  /// Reactively streams the newest-first summary list, re-emitting whenever
+  /// any `SummaryRecord` is added, changed, or removed - so the Home
+  /// dashboard updates live without manual refresh calls.
+  Stream<List<SummaryRecord>> watchAllSummaries() {
+    return _isar.summaryRecords
+        .where()
+        .sortByCreatedAtDesc()
+        .watch(fireImmediately: true);
+  }
+
   Future<SummaryRecord?> getSummaryById(int id) {
     return _isar.summaryRecords.get(id);
   }
