@@ -31,6 +31,7 @@ String _extractToMarkdownSync(Uint8List bytes) {
 
     buffer.writeln('## Sheet: $table\n');
 
+    var wroteHeaderRow = false;
     for (var i = 0; i < sheet.maxRows; i++) {
       final row = sheet.rows[i];
       if (row.every((cell) => cell == null || cell.value == null)) continue;
@@ -40,10 +41,12 @@ String _extractToMarkdownSync(Uint8List bytes) {
           .toList();
       buffer.writeln('| ${rowCells.join(' | ')} |');
 
-      // Header separator line after the first non-empty row.
-      if (i == 0) {
+      // Header separator line after the first non-empty row, wherever it
+      // falls (a leading blank row shouldn't suppress the divider).
+      if (!wroteHeaderRow) {
         final separators = List.generate(rowCells.length, (_) => '---');
         buffer.writeln('| ${separators.join(' | ')} |');
+        wroteHeaderRow = true;
       }
     }
     buffer.writeln('\n');

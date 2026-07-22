@@ -30,6 +30,23 @@ void main() {
     expect(markdown, isNot(contains('|  |')));
   });
 
+  test('extractFromBytes still emits a header separator when the sheet starts with a blank row', () async {
+    final workbook = Excel.createExcel();
+    final defaultSheetName = workbook.getDefaultSheet()!;
+    workbook.rename(defaultSheetName, 'Leading Blank');
+    final sheet = workbook['Leading Blank'];
+
+    // A fully empty leading row - the real header is row index 1, not 0.
+    sheet.appendRow([null, null]);
+    sheet.appendRow([TextCellValue('Region'), TextCellValue('Revenue')]);
+    sheet.appendRow([TextCellValue('East'), IntCellValue(1000)]);
+
+    final bytes = Uint8List.fromList(workbook.encode()!);
+    final markdown = await ExcelExtractorService.extractFromBytes(bytes);
+
+    expect(markdown, contains('| Region | Revenue |\n| --- | --- |'));
+  });
+
   test('extractFromBytes skips sheets with no rows', () async {
     final workbook = Excel.createExcel();
     final defaultSheetName = workbook.getDefaultSheet()!;
