@@ -105,3 +105,26 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+  # Design system (design/DESIGN.md, "Azure Precision"): Manrope for headlines,
+  # Inter for body/label text. Bundled as local variable-font assets (rather
+  # than fetched at runtime via a package like google_fonts) so text keeps
+  # rendering correctly with no network access - see Phase 9's offline
+  # guarantee in issues.md/work.md.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope.ttf
+          weight: 800
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+          weight: 400
+        - asset: assets/fonts/Inter.ttf
+          weight: 500
+        - asset: assets/fonts/Inter.ttf
+          weight: 600

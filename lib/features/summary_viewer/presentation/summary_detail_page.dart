@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/text_preview.dart';
 import '../../../models/summary_record.dart';
 import '../../../services/providers.dart';
 import '../../../services/tts_service.dart';
@@ -64,7 +65,7 @@ extension _FirstOrNull<T> on Iterable<T> {
 /// followed by each section's title and body, with Markdown syntax stripped
 /// since it would otherwise be read out literally (e.g. "asterisk asterisk").
 String _speechTextFor(SummaryRecord record) {
-  final buffer = StringBuffer(_stripMarkdown(record.executiveSummary));
+  final buffer = StringBuffer(stripMarkdown(record.executiveSummary));
   for (final section in record.sections ?? const <SectionSummary>[]) {
     final title = section.sectionTitle;
     if (title != null && title.isNotEmpty) {
@@ -74,17 +75,13 @@ String _speechTextFor(SummaryRecord record) {
     }
     final body = section.summaryText;
     if (body != null && body.isNotEmpty) {
-      buffer.writeln(_stripMarkdown(body));
+      buffer.writeln(stripMarkdown(body));
     }
     for (final point in section.keyPoints ?? const <String>[]) {
-      buffer.writeln(_stripMarkdown(point));
+      buffer.writeln(stripMarkdown(point));
     }
   }
   return buffer.toString().trim();
-}
-
-String _stripMarkdown(String text) {
-  return text.replaceAll(RegExp(r'[*_#`>-]'), '').trim();
 }
 
 class _SummaryDetailBody extends ConsumerWidget {
@@ -115,7 +112,10 @@ class _SummaryDetailBody extends ConsumerWidget {
                     child: Text(record.title, style: theme.textTheme.headlineSmall),
                   ),
                   IconButton(
-                    icon: Icon(record.isFavorite ? Icons.star : Icons.star_border),
+                    icon: Icon(
+                      record.isFavorite ? Icons.favorite : Icons.favorite_border,
+                      color: record.isFavorite ? theme.colorScheme.error : theme.colorScheme.outline,
+                    ),
                     tooltip: record.isFavorite ? 'Remove from favorites' : 'Add to favorites',
                     onPressed: () => _toggleFavorite(ref),
                   ),

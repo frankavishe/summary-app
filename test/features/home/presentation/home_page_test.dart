@@ -108,30 +108,29 @@ void main() {
     expect(find.text('Older Report'), findsOneWidget);
     expect(find.text('5 min read'), findsNWidgets(2));
 
-    final titles = tester
-        .widgetList<ListTile>(find.byType(ListTile))
-        .map((tile) => (tile.title! as Text).data)
-        .toList();
-    expect(titles, ['Newer Report', 'Older Report']);
+    // Newer should render above Older in the list (newest-first order).
+    final newerY = tester.getTopLeft(find.text('Newer Report')).dy;
+    final olderY = tester.getTopLeft(find.text('Older Report')).dy;
+    expect(newerY, lessThan(olderY));
   });
 
-  testWidgets('tapping the favorite star toggles isFavorite and updates live', (tester) async {
+  testWidgets('tapping the favorite heart toggles isFavorite and updates live', (tester) async {
     final record = buildRecord(title: 'Toggle Me');
     final id = await tester.runAsync(() => isarService.saveSummary(record));
     record.id = id!;
 
     await pumpHomePage(tester, initialSummaries: [record]);
 
-    expect(find.byIcon(Icons.star_border), findsOneWidget);
-    expect(find.byIcon(Icons.star), findsNothing);
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsNothing);
 
-    // The star button's onPressed is `void Function()`, so it fires the
+    // The heart button's onPressed is `void Function()`, so it fires the
     // toggle write without the widget tree ever awaiting it - plain pump()
     // calls only advance fake time and don't drive that real Isar write to
     // completion. Tap and poll for it inside runAsync's real event loop
     // rather than guessing a fixed delay (flaky under load otherwise).
     final reloaded = (await tester.runAsync(() async {
-      await tester.tap(find.byIcon(Icons.star_border));
+      await tester.tap(find.byIcon(Icons.favorite_border));
       var record = await isarService.getSummaryById(id);
       final deadline = DateTime.now().add(const Duration(seconds: 5));
       while (record?.isFavorite != true && DateTime.now().isBefore(deadline)) {
@@ -149,8 +148,8 @@ void main() {
     summariesController.add([reloaded]);
     await tester.pump();
 
-    expect(find.byIcon(Icons.star), findsOneWidget);
-    expect(find.byIcon(Icons.star_border), findsNothing);
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border), findsNothing);
   });
 
   testWidgets('tapping a summary card navigates to its detail view', (tester) async {
