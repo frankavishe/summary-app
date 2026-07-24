@@ -69,7 +69,11 @@ WebExtractionResult _extractSync(String htmlSource) {
       element.remove();
     }
   }
-  for (final element in document.querySelectorAll('*').toList()) {
+  // Scoped to descendants of <body> - matching against the <html> tag itself
+  // would remove the document root on sites (e.g. Wikipedia's Vector skin)
+  // that stamp feature-flag classes like "vector-feature-...-main-menu-..."
+  // on <html>, which contains the "menu" hint and would corrupt the whole tree.
+  for (final element in document.body?.querySelectorAll('*').toList() ?? const []) {
     final classAndId = '${element.className} ${element.id}'.toLowerCase();
     if (_junkClassOrIdHints.any(classAndId.contains)) {
       element.remove();

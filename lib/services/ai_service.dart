@@ -87,7 +87,7 @@ typedef ContentGenerator = Future<String> Function(String prompt);
 class GeminiSummarizerService {
   GeminiSummarizerService(
     String apiKey, {
-    String modelName = 'gemini-1.5-flash',
+    String modelName = 'gemini-flash-latest',
     this.maxTokensPerChunk = _defaultMaxTokensPerChunk,
   }) : _generate = _createGenerator(apiKey, modelName);
 

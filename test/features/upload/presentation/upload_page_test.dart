@@ -8,6 +8,7 @@ import 'package:summaread/features/upload/logic/summary_pipeline_provider.dart';
 import 'package:summaread/features/upload/logic/upload_source.dart';
 import 'package:summaread/features/upload/presentation/upload_page.dart';
 import 'package:summaread/models/summary_record.dart';
+import 'package:summaread/services/providers.dart';
 
 /// A [SummaryPipelineController] driven directly by the test instead of a
 /// real extractor/AI/Isar chain - `testWidgets` fakes all HTTP requests to
@@ -29,6 +30,18 @@ class _FakePipelineController extends SummaryPipelineController {
   }
 }
 
+/// Fakes [apiKeyControllerProvider] so most tests can exercise the upload
+/// flow without touching real secure storage (which has no test-time
+/// platform implementation - see `secure_storage_service.dart`).
+class _FakeApiKeyController extends ApiKeyController {
+  _FakeApiKeyController(this._value);
+
+  final String? _value;
+
+  @override
+  Future<String?> build() async => _value;
+}
+
 SummaryRecord buildRecord({required int id, required String title}) {
   return SummaryRecord()
     ..id = id
@@ -47,6 +60,7 @@ void main() {
     WidgetTester tester, {
     required Future<SummaryRecord> Function(UploadSource source) runImpl,
     List<SummaryRecord> knownSummaries = const [],
+    String? apiKey = 'test-key',
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -55,6 +69,7 @@ void main() {
             () => _FakePipelineController(runImpl),
           ),
           summariesStreamProvider.overrideWith((ref) => Stream.value(knownSummaries)),
+          apiKeyControllerProvider.overrideWith(() => _FakeApiKeyController(apiKey)),
         ],
         child: const MaterialApp(home: UploadPage()),
       ),
@@ -126,6 +141,27 @@ void main() {
 
     expect(find.text('Finished Report'), findsOneWidget);
     expect(find.text('New Summary'), findsNothing);
+  });
+
+  testWidgets('shows an Open Settings prompt instead of upload actions when no API key is set', (
+    tester,
+  ) async {
+    await pumpUploadPage(
+      tester,
+      runImpl: (_) async => buildRecord(id: 1, title: 'Unused'),
+      apiKey: null,
+    );
+
+    expect(find.text('Add your Gemini API key to get started'), findsOneWidget);
+    expect(find.text('Open Settings'), findsOneWidget);
+    expect(find.text('Choose a file (PDF, DOCX, XLSX)'), findsNothing);
+    expect(find.text('Paste a web article URL'), findsNothing);
+
+    await tester.tap(find.text('Open Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Gemini API Key'), findsOneWidget);
   });
 
   testWidgets('a pipeline failure shows an error snackbar instead of navigating', (tester) async {

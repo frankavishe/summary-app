@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../models/summary_record.dart';
+import '../../../services/providers.dart';
+import '../../settings/presentation/settings_page.dart';
 import '../../summary_viewer/presentation/summary_detail_page.dart';
 import '../logic/summary_pipeline_provider.dart';
 import '../logic/upload_source.dart';
@@ -25,10 +30,35 @@ class _UploadPageState extends ConsumerState<UploadPage> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: kAllowedUploadExtensions,
+      withData: true,
     );
-    final path = result?.files.single.path;
+    if (result == null || !mounted) return;
+
+    final path = await _resolveFilePath(result.files.single);
     if (path == null || !mounted) return;
     await ref.read(summaryPipelineControllerProvider.notifier).run(FileUploadSource(path));
+  }
+
+  /// Some Android content providers (Downloads, Drive, etc. - common on
+  /// emulators) don't expose a real filesystem path for the picked file, only
+  /// raw bytes. In that case, write the bytes to a temp file so the rest of
+  /// the pipeline (which extracts by path) can proceed unchanged. Without
+  /// this fallback, picking such a file silently did nothing.
+  Future<String?> _resolveFilePath(PlatformFile file) async {
+    if (file.path != null) return file.path;
+
+    final bytes = file.bytes;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read the selected file. Please try again.')),
+      );
+      return null;
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final tempFile = File('${tempDir.path}/${file.name}');
+    await tempFile.writeAsBytes(bytes);
+    return tempFile.path;
   }
 
   Future<void> _pasteUrl() async {
@@ -66,12 +96,15 @@ class _UploadPageState extends ConsumerState<UploadPage> {
     final isLoading = ref.watch(
       summaryPipelineControllerProvider.select((state) => state.isLoading),
     );
+    final hasApiKey = ref.watch(apiKeyControllerProvider).valueOrNull != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('New Summary')),
       body: Center(
         child: isLoading
             ? const _LoadingState()
+            : !hasApiKey
+            ? const _NoApiKeyState()
             : Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -102,6 +135,47 @@ class _UploadPageState extends ConsumerState<UploadPage> {
                   ],
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Shown instead of the upload actions until the user saves a Gemini API key
+/// in Settings (spec: "the app has no working AI feature until a key is
+/// entered").
+class _NoApiKeyState extends StatelessWidget {
+  const _NoApiKeyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.vpn_key_off_outlined, size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 16),
+          Text(
+            'Add your Gemini API key to get started',
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'SummaRead needs a Gemini API key to summarize documents and articles.',
+            style: theme.textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
+            icon: const Icon(Icons.settings),
+            label: const Text('Open Settings'),
+          ),
+        ],
       ),
     );
   }
