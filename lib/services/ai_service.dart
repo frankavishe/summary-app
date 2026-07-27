@@ -105,11 +105,20 @@ class GeminiSummarizerService {
 
   /// Documents whose estimated token count exceeds this are split via
   /// [TextChunker] and summarized chunk-by-chunk (map) before being merged
-  /// into one final result (reduce). Defaults to the spec's 50,000-token
-  /// threshold (section 8).
+  /// into one final result (reduce). Kept well under the spec's 50,000-token
+  /// ceiling (section 8) so each map call stays focused on a small enough
+  /// slice of text to produce a genuinely detailed summary instead of
+  /// compressing dozens of pages into a handful of bullets.
   final int maxTokensPerChunk;
 
-  static const int _defaultMaxTokensPerChunk = 50000;
+  static const int _defaultMaxTokensPerChunk = 20000;
+
+  /// How many chunks are summarized concurrently during the map step. Large
+  /// documents now produce more (smaller) chunks so each one summarizes in
+  /// depth; running them in parallel keeps overall wall-clock time down
+  /// instead of multiplying it by the extra chunk count.
+  static const int _chunkConcurrency = 4;
+
   static const int _maxAttempts = 3;
 
   static ContentGenerator _createGenerator(String apiKey, String modelName) {
@@ -119,6 +128,7 @@ class GeminiSummarizerService {
       generationConfig: GenerationConfig(
         temperature: 0.2,
         responseMimeType: 'application/json',
+        maxOutputTokens: 8192,
       ),
     );
     return (prompt) async {
@@ -143,17 +153,39 @@ class GeminiSummarizerService {
       );
     }
 
-    final chunkSummaries = <GeneratedSummary>[];
-    for (var i = 0; i < chunks.length; i++) {
-      chunkSummaries.add(
-        await _summarizeSingle(
-          content: chunks[i],
-          docType: docType,
-          partLabel: 'part ${i + 1} of ${chunks.length}',
-        ),
-      );
-    }
+    final chunkSummaries = await _mapConcurrently(
+      chunks,
+      _chunkConcurrency,
+      (chunk, i) => _summarizeSingle(
+        content: chunk,
+        docType: docType,
+        partLabel: 'part ${i + 1} of ${chunks.length}',
+      ),
+    );
     return _reduce(chunkSummaries, docType: docType);
+  }
+
+  /// Runs [task] over [items] with at most [concurrency] calls in flight at
+  /// once, returning results in the same order as [items] regardless of
+  /// completion order.
+  Future<List<R>> _mapConcurrently<T, R>(
+    List<T> items,
+    int concurrency,
+    Future<R> Function(T item, int index) task,
+  ) async {
+    final results = List<R?>.filled(items.length, null);
+    var nextIndex = 0;
+
+    Future<void> worker() async {
+      while (nextIndex < items.length) {
+        final index = nextIndex++;
+        results[index] = await task(items[index], index);
+      }
+    }
+
+    final workerCount = items.length < concurrency ? items.length : concurrency;
+    await Future.wait(List.generate(workerCount, (_) => worker()));
+    return results.cast<R>();
   }
 
   Future<GeneratedSummary> _summarizeSingle({
@@ -184,8 +216,11 @@ class GeminiSummarizerService {
 
     final prompt = '''
 You are an expert summary generator. Below are executive summaries generated from consecutive
-parts of a single $docType document. Merge them into ONE coherent executive summary (3-5 bullet
-points) describing the document as a whole.
+parts of a single $docType document. Merge them into ONE coherent executive summary describing
+the document as a whole.
+Cover every major theme, argument, or plot thread from across ALL parts, not just the first few -
+longer documents deserve more bullet points, not fewer. Use as many bullet points as needed to do
+that (typically 6-12 for a book-length document), rather than forcing everything into 3-5.
 Respond in JSON with exactly one key, "executiveSummary", containing a single string of Markdown
 bullet points.
 
@@ -211,9 +246,22 @@ $partSummaries
     final partNote = partLabel != null ? ' (this is $partLabel of a larger document)' : '';
     return '''
 You are an expert summary generator. Summarize the following $docType document$partNote.
+
+Be thorough, not brief: a reader should come away understanding the actual substance of this
+text, not just that it exists. Identify EVERY distinct topic, chapter, or section present in
+this text - don't skip or merge minor ones - and capture concrete details (names, numbers,
+arguments, examples) rather than vague generalities. When in doubt, include more detail rather
+than less.
+
 Structure the response in JSON format with two keys:
-1. "executiveSummary": High-level executive overview (3-5 bullet points).
-2. "sections": List of objects with "sectionTitle", "summaryText", and "keyPoints".
+1. "executiveSummary": An overview of THIS TEXT (4-6 bullet points).
+2. "sections": An array with one entry per major topic/chapter found in this text. Each object
+   has:
+   - "sectionTitle": a short descriptive title
+   - "summaryText": a detailed paragraph (roughly 4-8 sentences) explaining what this section
+     covers and why it matters
+   - "keyPoints": 5-10 specific, concrete bullet points from this section (facts, arguments,
+     figures, examples - not one-line platitudes)
 
 Document Text:
 $content

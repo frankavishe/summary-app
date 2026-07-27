@@ -30,8 +30,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<SummaryRecord> _visible(List<SummaryRecord> all) {
     final query = _searchController.text.trim().toLowerCase();
     return all.where((record) {
-      final matchesType = _selectedType == null || record.docType == _selectedType;
-      final matchesQuery = query.isEmpty || record.title.toLowerCase().contains(query);
+      final matchesType =
+          _selectedType == null || record.docType == _selectedType;
+      final matchesQuery =
+          query.isEmpty || record.title.toLowerCase().contains(query);
       return matchesType && matchesQuery;
     }).toList();
   }
@@ -45,7 +47,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary),
+            Icon(
+              Icons.description_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(width: 10),
             const Text('SummaRead'),
           ],
@@ -118,7 +123,9 @@ class _EmptyState extends StatelessWidget {
             Text(
               'Tap the + button to summarize a PDF, Word document, spreadsheet, or web article.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -150,7 +157,8 @@ class _Dashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isFiltered = searchController.text.trim().isNotEmpty || selectedType != null;
+    final isFiltered =
+        searchController.text.trim().isNotEmpty || selectedType != null;
 
     return CustomScrollView(
       slivers: [
@@ -160,13 +168,18 @@ class _Dashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Welcome back, Reader', style: theme.textTheme.headlineMedium),
+                Text(
+                  'Welcome back, Reader',
+                  style: theme.textTheme.headlineMedium,
+                ),
                 const SizedBox(height: 6),
                 Text(
                   allSummaries.length == 1
                       ? 'You have 1 summary saved.'
                       : 'You have ${allSummaries.length} summaries saved.',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 TextField(
@@ -224,14 +237,10 @@ class _Dashboard extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
             sliver: SliverList.separated(
-              itemCount: visibleSummaries.length + 1,
+              itemCount: visibleSummaries.length,
               separatorBuilder: (context, index) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                if (index == visibleSummaries.length) {
-                  return const _NewSummaryActionCard();
-                }
-                return _SummaryCard(record: visibleSummaries[index]);
-              },
+              itemBuilder: (context, index) =>
+                  _SummaryCard(record: visibleSummaries[index]),
             ),
           ),
       ],
@@ -267,7 +276,11 @@ class _NoMatchesState extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -276,8 +289,12 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final background = selected ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHigh;
-    final foreground = selected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant;
+    final background = selected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.surfaceContainerHigh;
+    final foreground = selected
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurfaceVariant;
     return Material(
       color: background,
       shape: const StadiumBorder(),
@@ -287,7 +304,10 @@ class _FilterChip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Center(
-            child: Text(label, style: theme.textTheme.titleSmall?.copyWith(color: foreground)),
+            child: Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(color: foreground),
+            ),
           ),
         ),
       ),
@@ -307,11 +327,20 @@ class _DocTypeStyle {
 _DocTypeStyle _styleFor(DocumentType docType) {
   switch (docType) {
     case DocumentType.pdf:
-      return const _DocTypeStyle(icon: Icons.picture_as_pdf_outlined, label: 'PDF');
+      return const _DocTypeStyle(
+        icon: Icons.picture_as_pdf_outlined,
+        label: 'PDF',
+      );
     case DocumentType.docx:
-      return const _DocTypeStyle(icon: Icons.description_outlined, label: 'DOCX');
+      return const _DocTypeStyle(
+        icon: Icons.description_outlined,
+        label: 'DOCX',
+      );
     case DocumentType.excel:
-      return const _DocTypeStyle(icon: Icons.table_chart_outlined, label: 'Excel');
+      return const _DocTypeStyle(
+        icon: Icons.table_chart_outlined,
+        label: 'Excel',
+      );
     case DocumentType.webArticle:
       return const _DocTypeStyle(icon: Icons.public, label: 'Web Article');
   }
@@ -392,13 +421,18 @@ class _SummaryCard extends ConsumerWidget {
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Icon(Icons.delete_outline, color: theme.colorScheme.onErrorContainer),
+        child: Icon(
+          Icons.delete_outline,
+          color: theme.colorScheme.onErrorContainer,
+        ),
       ),
       child: Card(
         child: InkWell(
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => SummaryDetailPage(summaryId: record.id)),
+            MaterialPageRoute(
+              builder: (_) => SummaryDetailPage(summaryId: record.id),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -413,7 +447,9 @@ class _SummaryCard extends ConsumerWidget {
                       height: 48,
                       decoration: BoxDecoration(
                         color: avatarColor,
-                        borderRadius: BorderRadius.circular(AppTheme.controlRadius + 4),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.controlRadius + 4,
+                        ),
                       ),
                       child: Icon(style.icon, color: theme.colorScheme.primary),
                     ),
@@ -428,10 +464,16 @@ class _SummaryCard extends ConsumerWidget {
                     ),
                     IconButton(
                       icon: Icon(
-                        record.isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: record.isFavorite ? theme.colorScheme.error : theme.colorScheme.outline,
+                        record.isFavorite
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        color: record.isFavorite
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.outline,
                       ),
-                      tooltip: record.isFavorite ? 'Remove from favorites' : 'Add to favorites',
+                      tooltip: record.isFavorite
+                          ? 'Remove from favorites'
+                          : 'Add to favorites',
                       onPressed: () => _toggleFavorite(ref),
                     ),
                   ],
@@ -442,7 +484,9 @@ class _SummaryCard extends ConsumerWidget {
                     preview,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -451,22 +495,35 @@ class _SummaryCard extends ConsumerWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(AppTheme.controlRadius),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.controlRadius,
+                        ),
                       ),
                       child: Text(
                         style.label,
-                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     const Spacer(),
-                    Icon(Icons.schedule, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.schedule,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${record.estimatedReadTimeMinutes} min read',
-                      style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -477,92 +534,4 @@ class _SummaryCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Trailing call-to-action card at the end of the summary list, styled with
-/// a dashed border per `design/DESIGN.md`'s "Empty Placeholder / Action
-/// Card" - tapping it opens the same Upload flow as the FAB.
-class _NewSummaryActionCard extends StatelessWidget {
-  const _NewSummaryActionCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return CustomPaint(
-      foregroundPainter: _DashedBorderPainter(
-        color: theme.colorScheme.outlineVariant,
-        radius: AppTheme.cardRadius,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const UploadPage())),
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.add, color: theme.colorScheme.primary, size: 28),
-                ),
-                const SizedBox(height: 12),
-                Text('Summarize new document', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 4),
-                Text(
-                  'Add a PDF, Word doc, spreadsheet, or web link',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DashedBorderPainter extends CustomPainter {
-  _DashedBorderPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  static const _dashWidth = 6.0;
-  static const _dashGap = 4.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
-    final path = Path()..addRRect(rrect);
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = distance + _dashWidth;
-        canvas.drawPath(
-          metric.extractPath(distance, next > metric.length ? metric.length : next),
-          paint,
-        );
-        distance = next + _dashGap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
 }
