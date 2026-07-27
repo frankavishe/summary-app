@@ -128,7 +128,7 @@ class GeminiSummarizerService {
       generationConfig: GenerationConfig(
         temperature: 0.2,
         responseMimeType: 'application/json',
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
       ),
     );
     return (prompt) async {
@@ -188,14 +188,83 @@ class GeminiSummarizerService {
     return results.cast<R>();
   }
 
+  /// Below this content length, [_summarizeSingle] gives up on splitting
+  /// further and just surfaces whatever error occurred - splitting a sliver
+  /// this small isn't going to fix a genuine failure.
+  static const int _minSplittableChars = 2000;
+
+  /// Caps how many times a single chunk can be recursively halved (so a
+  /// pathological chunk can't recurse indefinitely); 3 levels already means
+  /// up to 8-way splitting.
+  static const int _maxSplitDepth = 3;
+
+  /// Summarizes [content] via one Gemini call. Detailed per-section output
+  /// occasionally overruns the model's output token cap and comes back as
+  /// truncated (invalid) JSON; rather than losing the whole document to one
+  /// oversized chunk, this splits the chunk in half and summarizes each half
+  /// independently, recursing until each piece is small enough to fit.
   Future<GeneratedSummary> _summarizeSingle({
     required String content,
     required String docType,
     String? partLabel,
+    int splitDepth = 0,
   }) async {
     final prompt = _buildPrompt(content: content, docType: docType, partLabel: partLabel);
-    final responseText = await _generateWithRetry(prompt);
-    return _parse(responseText);
+    try {
+      final responseText = await _generateWithRetry(prompt);
+      return _parse(responseText);
+    } on AiSummarizationException {
+      if (splitDepth >= _maxSplitDepth || content.length < _minSplittableChars) rethrow;
+
+      final (firstHalf, secondHalf) = _splitContentInHalf(content);
+      final results = await Future.wait([
+        _summarizeSingle(
+          content: firstHalf,
+          docType: docType,
+          partLabel: partLabel,
+          splitDepth: splitDepth + 1,
+        ),
+        _summarizeSingle(
+          content: secondHalf,
+          docType: docType,
+          partLabel: partLabel,
+          splitDepth: splitDepth + 1,
+        ),
+      ]);
+      return GeneratedSummary(
+        executiveSummary: results
+            .map((r) => r.executiveSummary)
+            .where((s) => s.isNotEmpty)
+            .join('\n'),
+        sections: results.expand((r) => r.sections).toList(),
+      );
+    }
+  }
+
+  /// Splits [content] roughly in half on a paragraph boundary so a recursive
+  /// re-summarization doesn't cut a paragraph in two. Falls back to a plain
+  /// character-count split if [content] is one giant paragraph.
+  (String, String) _splitContentInHalf(String content) {
+    final paragraphs = content.split(RegExp(r'\n\s*\n'));
+    if (paragraphs.length > 1) {
+      final target = content.length / 2;
+      final first = StringBuffer();
+      var splitIndex = paragraphs.length;
+      for (var i = 0; i < paragraphs.length; i++) {
+        if (first.isNotEmpty && first.length + paragraphs[i].length > target) {
+          splitIndex = i;
+          break;
+        }
+        if (first.isNotEmpty) first.write('\n\n');
+        first.write(paragraphs[i]);
+      }
+      final second = paragraphs.sublist(splitIndex).join('\n\n');
+      if (first.isNotEmpty && second.isNotEmpty) {
+        return (first.toString(), second);
+      }
+    }
+    final mid = content.length ~/ 2;
+    return (content.substring(0, mid), content.substring(mid));
   }
 
   /// Merges the executive summaries of each chunk into one coherent overview
