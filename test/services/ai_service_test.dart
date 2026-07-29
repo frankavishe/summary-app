@@ -49,6 +49,29 @@ void main() {
       expect(result.executiveSummary, 'ok');
     });
 
+    test('honors a server-suggested retry delay for quota/rate-limit errors', () async {
+      var attempts = 0;
+      final stopwatch = Stopwatch()..start();
+      final service = GeminiSummarizerService.withGenerator((prompt) async {
+        attempts++;
+        if (attempts < 2) {
+          // Mirrors the real Gemini free-tier quota error message format.
+          throw Exception(
+            'You exceeded your current quota... Please retry in 0.05s.',
+          );
+        }
+        return '{"executiveSummary": "ok", "sections": []}';
+      });
+
+      final result = await service.summarizeDocument(content: 'text', docType: 'pdf');
+      stopwatch.stop();
+
+      expect(attempts, 2);
+      expect(result.executiveSummary, 'ok');
+      // The parsed 0.05s delay plus the implementation's 500ms safety buffer.
+      expect(stopwatch.elapsed, greaterThanOrEqualTo(const Duration(milliseconds: 500)));
+    });
+
     test('throws AiSummarizationException after exhausting retries', () async {
       final service = GeminiSummarizerService.withGenerator((prompt) async {
         throw Exception('permanent failure');
@@ -69,6 +92,18 @@ void main() {
         () => service.summarizeDocument(content: 'text', docType: 'pdf'),
         throwsA(isA<AiSummarizationException>()),
       );
+    });
+
+    test('recovers from an un-escaped backslash in Gemini JSON (e.g. LaTeX notation)', () async {
+      final service = GeminiSummarizerService.withGenerator((prompt) async {
+        // Real-world failure: Gemini echoes LaTeX like $\Omega$ into a JSON string
+        // without escaping the backslash, which plain jsonDecode rejects.
+        return r'{"executiveSummary": "Uses $\Omega$ notation.", "sections": []}';
+      });
+
+      final result = await service.summarizeDocument(content: 'text', docType: 'pdf');
+
+      expect(result.executiveSummary, r'Uses $\Omega$ notation.');
     });
 
     test('throws AiSummarizationException on a JSON response that is not an object', () async {

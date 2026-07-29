@@ -1,6 +1,12 @@
 // Throwaway manual verification script - not part of the normal test suite.
-// Requires a real GEMINI_API_KEY in .env and network access. Run with:
-//   flutter test test/manual/real_pdf_manual_test.dart --timeout 20m
+// Tagged 'manual' so a plain `flutter test` skips it (see dart_test.yaml);
+// requires a real GEMINI_API_KEY in .env, network access, and enough live
+// Gemini quota to survive a ~250k-token document's map-reduce chunk calls.
+// Run explicitly with:
+//   flutter test --tags manual test/manual/real_pdf_manual_test.dart --timeout 20m
+@Tags(['manual'])
+library;
+
 import 'dart:io';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';

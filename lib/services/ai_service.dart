@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -113,13 +114,18 @@ class GeminiSummarizerService {
 
   static const int _defaultMaxTokensPerChunk = 20000;
 
-  /// How many chunks are summarized concurrently during the map step. Large
-  /// documents now produce more (smaller) chunks so each one summarizes in
-  /// depth; running them in parallel keeps overall wall-clock time down
-  /// instead of multiplying it by the extra chunk count.
-  static const int _chunkConcurrency = 4;
+  /// How many chunks are summarized concurrently during the map step. Kept
+  /// low so a large document's chunk calls don't burst past the Gemini
+  /// free-tier's per-minute request quota all at once - a book-length
+  /// document can easily need a dozen-plus chunk calls, and firing them in a
+  /// bigger batch than this reliably trips rate limiting (see ai_service
+  /// map-reduce retry logic below).
+  static const int _chunkConcurrency = 2;
 
-  static const int _maxAttempts = 3;
+  /// Higher than a typical transient-error retry count because quota/rate
+  /// -limit errors (see [_retryDelayFor]) need to survive one or more ~60s
+  /// quota-reset windows, not just a couple of quick retries.
+  static const int _maxAttempts = 5;
 
   static ContentGenerator _createGenerator(String apiKey, String modelName) {
     final model = GenerativeModel(
@@ -349,12 +355,43 @@ $content
       } catch (e) {
         lastError = e;
         if (attempt < _maxAttempts) {
-          await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
+          await Future<void>.delayed(_retryDelayFor(e, attempt));
         }
       }
     }
     throw AiSummarizationException('Gemini API request failed after $_maxAttempts attempts: $lastError');
   }
+
+  /// Rate-limit/quota errors come back from Gemini with a server-suggested
+  /// "retry in Xs" delay (typically tens of seconds) - much longer than the
+  /// default backoff, and worth honoring since a large document's chunks can
+  /// otherwise burn through the free-tier per-minute quota and fail
+  /// permanently after just a couple of seconds of retrying. Anything else
+  /// uses the standard short exponential backoff.
+  static final RegExp _retryDelaySeconds = RegExp(r'retry in ([\d.]+)s', caseSensitive: false);
+  static const Duration _maxRateLimitBackoff = Duration(seconds: 90);
+  static final Random _jitterRandom = Random();
+
+  Duration _retryDelayFor(Object error, int attempt) {
+    final message = error.toString();
+    final suggested = _retryDelaySeconds.firstMatch(message);
+    if (suggested != null) {
+      final seconds = double.tryParse(suggested.group(1)!);
+      if (seconds != null) {
+        final delay = Duration(milliseconds: (seconds * 1000).ceil() + _jitterMillis());
+        return delay > _maxRateLimitBackoff ? _maxRateLimitBackoff : delay;
+      }
+    }
+    if (message.toLowerCase().contains('quota') || message.contains('429')) {
+      return _maxRateLimitBackoff + Duration(milliseconds: _jitterMillis());
+    }
+    return Duration(milliseconds: 300 * attempt);
+  }
+
+  /// Random 0-5s on top of a rate-limit backoff so concurrent map-step
+  /// chunks that all got rate-limited around the same moment don't all
+  /// retry in lockstep and immediately re-trip the same per-minute quota.
+  int _jitterMillis() => 500 + _jitterRandom.nextInt(4500);
 
   GeneratedSummary _parse(String responseText) {
     final json = _decodeJson(responseText);
@@ -369,10 +406,28 @@ $content
     Object? decoded;
     try {
       decoded = jsonDecode(responseText);
+    } on FormatException catch (e) {
+      try {
+        decoded = jsonDecode(_escapeStrayBackslashes(responseText));
+      } catch (_) {
+        throw AiSummarizationException('Gemini did not return valid JSON: $e');
+      }
     } catch (e) {
       throw AiSummarizationException('Gemini did not return valid JSON: $e');
     }
     if (decoded is Map<String, dynamic>) return decoded;
     throw const AiSummarizationException('Expected a JSON object at the top level of the Gemini response.');
+  }
+
+  /// Content containing LaTeX-style notation (e.g. `$\Omega$`, `$\alpha$`)
+  /// occasionally comes back from Gemini with the backslash left un-escaped
+  /// inside a JSON string, which [jsonDecode] rejects as an invalid escape
+  /// sequence. Doubles up any backslash that isn't already starting a valid
+  /// JSON escape (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`) so
+  /// it parses as a literal backslash instead.
+  static final RegExp _strayBackslash = RegExp(r'\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})');
+
+  String _escapeStrayBackslashes(String responseText) {
+    return responseText.replaceAll(_strayBackslash, r'\\');
   }
 }

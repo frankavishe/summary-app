@@ -1,0 +1,3 @@
+tags:
+  manual:
+    skip: "Live Gemini API test requiring a real API key, network access, and API quota - run explicitly with: flutter test --tags manual test/manual/real_pdf_manual_test.dart --timeout 20m"
