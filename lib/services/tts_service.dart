@@ -79,21 +79,53 @@ class TtsService {
     _attachHandlers();
   }
 
+  /// Android's TTS engine rejects an utterance outright (logs "Text too
+  /// long" and never fires a start/completion callback) once it crosses
+  /// `TextToSpeech.getMaxSpeechInputLength()` - 4000 chars on stock Android.
+  /// Any real summary (executive summary + sections) routinely exceeds that,
+  /// so long text is split into speech-safe chunks and queued sequentially
+  /// rather than handed to the engine in one call.
+  static const int _maxChunkChars = 3500;
+
   final TtsEngine _engine;
   final _stateController = StreamController<TtsPlaybackState>.broadcast();
   TtsPlaybackState _state = TtsPlaybackState.stopped;
   String? _lastText;
+  final List<String> _pendingChunks = [];
+  bool _sequencing = false;
 
   TtsPlaybackState get state => _state;
   Stream<TtsPlaybackState> get stateStream => _stateController.stream;
 
   void _attachHandlers() {
     _engine.setStartHandler(() => _setState(TtsPlaybackState.playing));
-    _engine.setCompletionHandler(() => _setState(TtsPlaybackState.stopped));
-    _engine.setCancelHandler(() => _setState(TtsPlaybackState.stopped));
+    _engine.setCompletionHandler(_onChunkComplete);
+    _engine.setCancelHandler(() {
+      _sequencing = false;
+      _pendingChunks.clear();
+      _setState(TtsPlaybackState.stopped);
+    });
     _engine.setPauseHandler(() => _setState(TtsPlaybackState.paused));
     _engine.setContinueHandler(() => _setState(TtsPlaybackState.playing));
-    _engine.setErrorHandler((_) => _setState(TtsPlaybackState.stopped));
+    _engine.setErrorHandler((_) {
+      _sequencing = false;
+      _pendingChunks.clear();
+      _setState(TtsPlaybackState.stopped);
+    });
+  }
+
+  void _onChunkComplete() {
+    if (_sequencing && _pendingChunks.isNotEmpty) {
+      _speakNextChunk();
+    } else {
+      _sequencing = false;
+      _setState(TtsPlaybackState.stopped);
+    }
+  }
+
+  Future<void> _speakNextChunk() async {
+    final chunk = _pendingChunks.removeAt(0);
+    await _engine.speak(chunk);
   }
 
   void _setState(TtsPlaybackState newState) {
@@ -106,7 +138,15 @@ class TtsService {
   /// Speaks [text] from the beginning, replacing anything currently playing.
   Future<void> speak(String text) async {
     _lastText = text;
-    await _engine.speak(text);
+    _pendingChunks
+      ..clear()
+      ..addAll(splitForSpeech(text, maxLength: _maxChunkChars));
+    _sequencing = true;
+    if (_pendingChunks.isEmpty) {
+      _sequencing = false;
+      return;
+    }
+    await _speakNextChunk();
   }
 
   /// Resumes playback of the last spoken text (see class doc - this restarts
@@ -114,7 +154,7 @@ class TtsService {
   Future<void> resume() async {
     final text = _lastText;
     if (text != null) {
-      await _engine.speak(text);
+      await speak(text);
     }
   }
 
@@ -123,6 +163,8 @@ class TtsService {
   }
 
   Future<void> stop() async {
+    _sequencing = false;
+    _pendingChunks.clear();
     await _engine.stop();
     _setState(TtsPlaybackState.stopped);
   }
@@ -131,4 +173,40 @@ class TtsService {
     await stop();
     await _stateController.close();
   }
+}
+
+/// Splits [text] into pieces no longer than [maxLength], breaking on
+/// whitespace so words stay intact; a single "word" longer than [maxLength]
+/// is hard-split as a last resort. Exposed for testing.
+@visibleForTesting
+List<String> splitForSpeech(String text, {required int maxLength}) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return const [];
+  if (trimmed.length <= maxLength) return [trimmed];
+
+  final chunks = <String>[];
+  final buffer = StringBuffer();
+
+  void flush() {
+    final piece = buffer.toString().trim();
+    if (piece.isNotEmpty) chunks.add(piece);
+    buffer.clear();
+  }
+
+  for (final word in trimmed.split(RegExp(r'\s+'))) {
+    if (word.length > maxLength) {
+      flush();
+      for (var i = 0; i < word.length; i += maxLength) {
+        chunks.add(word.substring(i, (i + maxLength).clamp(0, word.length)));
+      }
+      continue;
+    }
+    if (buffer.length + word.length + 1 > maxLength) {
+      flush();
+    }
+    if (buffer.isNotEmpty) buffer.write(' ');
+    buffer.write(word);
+  }
+  flush();
+  return chunks;
 }

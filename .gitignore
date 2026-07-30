@@ -47,6 +47,10 @@ app.*.map.json
 # Local secrets - Gemini API key (see settings.md / issues.md)
 .env
 
+# Scratch fixtures for manual on-device testing (Phase 10) - not automated
+# test fixtures (those are built in-memory), not meant to be version-controlled.
+/test_fixtures_manual/
+
 # Project planning/tracking docs and source spec - not part of the app itself
 /issues.md
 /phase.md
