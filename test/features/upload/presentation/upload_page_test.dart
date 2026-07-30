@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -176,7 +177,24 @@ void main() {
     await tester.tap(find.text('Summarize'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not generate summary'), findsOneWidget);
+    expect(find.textContaining('Something went wrong'), findsOneWidget);
     expect(find.text('New Summary'), findsOneWidget);
+  });
+
+  testWidgets('a no-internet failure shows a friendly message, not a raw exception', (
+    tester,
+  ) async {
+    await pumpUploadPage(
+      tester,
+      runImpl: (_) async => throw const SocketException('Failed host lookup'),
+    );
+
+    await tester.tap(find.text('Paste a web article URL'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'https://example.com/article');
+    await tester.tap(find.text('Summarize'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No internet connection. Check your connection and try again.'), findsOneWidget);
   });
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/utils/user_facing_error.dart';
 import '../../../models/summary_record.dart';
 import '../../../services/providers.dart';
 import '../../settings/presentation/settings_page.dart';
@@ -15,6 +16,14 @@ import '../logic/upload_source.dart';
 /// Extensions the file picker is restricted to - kept as a named constant so
 /// it can be asserted on directly in tests without driving the native picker.
 const List<String> kAllowedUploadExtensions = ['pdf', 'docx', 'xlsx'];
+
+/// Files larger than this are rejected before extraction even starts, so a
+/// huge pick doesn't get read entirely into memory (extractors load the
+/// whole file's bytes) on a phone. 50MB comfortably covers real-world
+/// PDFs/DOCX/XLSX while ruling out pathological picks.
+const int kMaxUploadFileBytes = 50 * 1024 * 1024;
+
+String _formatMegabytes(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
 
 class UploadPage extends ConsumerStatefulWidget {
   const UploadPage({super.key});
@@ -34,7 +43,20 @@ class _UploadPageState extends ConsumerState<UploadPage> {
     );
     if (result == null || !mounted) return;
 
-    final path = await _resolveFilePath(result.files.single);
+    final file = result.files.single;
+    if (file.size > kMaxUploadFileBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'That file is ${_formatMegabytes(file.size)}, over the '
+            '${_formatMegabytes(kMaxUploadFileBytes)} limit. Try a smaller file.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final path = await _resolveFilePath(file);
     if (path == null || !mounted) return;
     await ref.read(summaryPipelineControllerProvider.notifier).run(FileUploadSource(path));
   }
@@ -88,7 +110,7 @@ class _UploadPageState extends ConsumerState<UploadPage> {
       }
       if (next.hasError && !next.isLoading) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not generate summary: ${next.error}')),
+          SnackBar(content: Text(userFacingErrorMessage(next.error!))),
         );
       }
     });

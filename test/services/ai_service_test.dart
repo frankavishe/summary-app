@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:summaread/services/ai_service.dart';
 
 void main() {
@@ -81,6 +82,26 @@ void main() {
         () => service.summarizeDocument(content: 'text', docType: 'pdf'),
         throwsA(isA<AiSummarizationException>()),
       );
+    });
+
+    test('fails fast on an invalid API key without retrying', () async {
+      var attempts = 0;
+      final service = GeminiSummarizerService.withGenerator((prompt) async {
+        attempts++;
+        throw InvalidApiKey('API key not valid. Please pass a valid API key.');
+      });
+
+      await expectLater(
+        () => service.summarizeDocument(content: 'text', docType: 'pdf'),
+        throwsA(
+          isA<AiSummarizationException>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid Gemini API key'),
+          ),
+        ),
+      );
+      expect(attempts, 1);
     });
 
     test('throws AiSummarizationException on malformed JSON', () async {

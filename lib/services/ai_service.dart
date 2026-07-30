@@ -352,6 +352,15 @@ $content
           throw const AiSummarizationException('Gemini returned an empty response.');
         }
         return text;
+      } on InvalidApiKey catch (e) {
+        // Permanent, not transient - retrying a bad key just burns 5 attempts'
+        // worth of backoff before showing the same error, so fail immediately
+        // with a message that points at the fix (Settings).
+        throw AiSummarizationException(
+          'Invalid Gemini API key (${e.message}). Check the key saved in Settings.',
+        );
+      } on UnsupportedUserLocation catch (e) {
+        throw AiSummarizationException(e.message);
       } catch (e) {
         lastError = e;
         if (attempt < _maxAttempts) {
